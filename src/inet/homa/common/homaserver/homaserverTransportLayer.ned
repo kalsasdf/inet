@@ -1,0 +1,88 @@
+//
+// Copyright (C) OpenSim Ltd.
+//
+// This program is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public License
+// as published by the Free Software Foundation; either version 2
+// of the License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with this program; if not, see <http://www.gnu.org/licenses/>.
+//
+
+package inet.homa.common.homaserver;
+
+import inet.homa.application.ITrafficGeneratorApp;
+import inet.homa.transport.ITransportScheme;
+import inet.homa.transport.HomaTransport;
+import inet.common.MessageDispatcher;
+import inet.common.misc.ThruputMeter;
+import inet.transportlayer.contract.ISctp;
+import inet.transportlayer.contract.ITcp;
+import inet.transportlayer.contract.IUdp;
+import inet.routing.contract.IOspf;
+
+module homaserverTransportLayer extends homaserverNetworkLayer
+{
+    parameters:
+        bool hasUdp = default(true);
+        bool hasTcp = default(true);
+        bool hasSctp = default(false);
+        bool hasTransportScheme = default(numTrafficGeneratorApp>0);
+        @figure[transportLayer](type=rectangle; pos=1070,161; size=200,20; fillColor=#ff0000; lineColor=#808080; cornerRadius=5; fillOpacity=0.1);
+        @figure[transportLayer.title](type=text; pos=1245,161; anchor=ne; text="transport layer");
+    submodules:
+        udp: <default(firstAvailableOrEmpty("Udp"))> like IUdp if hasUdp {
+            parameters:
+                @display("p=596.925,239.4;is=s");
+        }
+        tcp: <default(firstAvailableOrEmpty("Tcp", "TcpLwip", "TcpNsc"))> like ITcp if hasTcp {
+            parameters:
+                @display("p=837.89996,239.4;is=s");
+        }
+        sctp: <default(firstAvailableOrEmpty("Sctp"))> like ISctp if hasSctp {
+            parameters:
+                @display("p=1055.25,239.4;is=s");
+        }
+        tn: MessageDispatcher {
+            parameters:
+                @display("p=750,296;b=1000,5,,,,1");
+        }
+        transportScheme: <default(firstAvailableOrEmpty("HomaTransport"))> like ITransportScheme if hasTransportScheme {
+            parameters:
+                @display("p=596.925,159.075;is=s");
+                transportConfig = xmldoc("config.xml", "/topologyConfig/hostConfig[@id=$PARENTMODULE_INDEX]/transportConfig");
+                nicLinkSpeed = nicLinkSpeed;
+        }
+    connections allowunconnected:
+
+
+        transportScheme.lowerOut --> udp.appIn if hasTransportScheme;
+        transportScheme.lowerIn <-- udp.appOut if hasTransportScheme;
+
+        udp.ipOut --> tn.in++ if hasUdp;
+        udp.ipIn <-- tn.out++ if hasUdp;
+
+        tcp.ipOut --> tn.in++ if hasTcp;
+        tcp.ipIn <-- tn.out++ if hasTcp;
+
+        sctp.ipOut --> tn.in++ if hasSctp;
+        tn.out++ --> sctp.ipIn if hasSctp;
+
+        tn.out++ --> ipv4.transportIn if hasIpv4;
+        tn.in++ <-- ipv4.transportOut if hasIpv4;
+
+        tn.out++ --> ipv6.transportIn if hasIpv6;
+        tn.in++ <-- ipv6.transportOut if hasIpv6;
+
+        tn.out++ --> generic.transportIn if hasGn;
+        tn.in++ <-- generic.transportOut if hasGn;
+
+        tn.out++ --> nl.in++;
+        tn.in++ <-- nl.out++;
+}
