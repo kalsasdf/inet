@@ -52,7 +52,7 @@ simple UdpFlowApp like IApp
         double multiplelinkSpeed = default(1);
         int randomSeed = default(1);
         double flowSize @unit(KB) = default(100KB);
-        double linkSpeed @unit(Mbps) = default(1000Mbps);
+        double linkSpeed @unit(Gbps) = default(1Gbps);
         volatile int messageLength @unit(B); // length of messages to generate, in bytes
         double startTime @unit(s) = default(this.sendInterval); // application start time (start of the first packet)
         double stopTime @unit(s) = default(-1s);  // time of finishing sending, -1s means forever

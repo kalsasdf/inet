@@ -51,7 +51,7 @@ module MpcTransportLayer extends MpcNetworkLayer
             parameters:
                 @display("p=750,296;b=1000,5,,,,1");
         }
-        MPC: spraypass {
+        MPC: MPC {
             @display("p=595.38464,251.53847");
         }
     connections allowunconnected:

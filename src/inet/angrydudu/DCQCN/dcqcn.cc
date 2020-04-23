@@ -218,19 +218,28 @@ void dcqcn::processUpperpck(Packet *pck)
     delete pck;
 }
 
-void dcqcn::processLowerpck(Packet *pck)
+void dcqcn::updateAllTxRate()
 {
-    if (!strcmp(pck->getFullName(),"CNP"))
+    double flow_amount = sender_flowMap.size();
+    auto it = sender_flowMap.begin();
+    for(; it!=sender_flowMap.end(); ++ it)
     {
-        receive_cnp(pck);
-    }
-    else if (string(pck->getFullName()).find("Data") != string::npos)
-    {
-        receive_data(pck);
-    }
-    else
-    {
-        sendUp(pck);
+        sender_flowinfo flowinfo = it->second;
+        flowinfo.maxTxRate = linkspeed/flow_amount;
+        EV<<"updateTxRate(), before update, txRate = "<<flowinfo.currentRate<<", nxtSendTime = "<<
+                flowinfo.nxtSendTime<<", max TX rate = "<<flowinfo.maxTxRate<<endl;
+        if (flowinfo.currentRate > flowinfo.maxTxRate)
+        {
+            flowinfo.nxtSendTime = simTime() + (flowinfo.nxtSendTime - simTime()) *
+                    flowinfo.currentRate/flowinfo.maxTxRate; // update nxt sending time
+            flowinfo.currentRate = flowinfo.maxTxRate;   // update current TX rate
+            sender_flowMap[it->first] = flowinfo;
+            cancelEvent(flowinfo.senddata);
+            scheduleAt(flowinfo.nxtSendTime,flowinfo.senddata);
+        }
+        EV<<"updateTxRate(), after update, currentRate = "<<flowinfo.currentRate<<", nxtSendTime = "<<
+                flowinfo.nxtSendTime<<endl;
+        sender_flowMap[it->first] = flowinfo;
     }
 }
 
@@ -328,32 +337,20 @@ void dcqcn::send_data(uint32_t flowid)
     }
 }
 
-void dcqcn::send_cnp(uint32_t flowid)
+void dcqcn::processLowerpck(Packet *pck)
 {
-    receiver_flowinfo rcvinfo = receiver_flowMap.find(flowid)->second;
-    Packet *cnp = new Packet("CNP");
-    const auto& content = makeShared<Ipv4Header>();
-    content->setChunkLength(B(16));
-    content->enableImplicitChunkSerialization = true;
-    content->setCrcMode(crcMode);
-    content->setCrc(crcNumber);
-    content->setIdentification(rcvinfo.cnpSequence);
-    cnp->insertAtFront(content);
-    cnp->setPathID(intrand(8));
-    cnp->setTimestamp(simTime());
-    cnp->setPriority(99);
-    cnp->setFlowId(flowid);
-    cnp->addTagIfAbsent<L3AddressReq>()->setDestAddress(rcvinfo.Sender_srcAddr);
-    cnp->addTagIfAbsent<L3AddressReq>()->setSrcAddress(rcvinfo.Sender_destAddr);
-    cnp->addTagIfAbsent<DispatchProtocolReq>()->setProtocol(&Protocol::ipv4);
-    cnp->addTagIfAbsent<PacketProtocolTag>()->setProtocol(&Protocol::udp);
-    EV_INFO << "Sending CNP packet to "<<flowid <<", cnp interval = "<<simTime()-rcvinfo.lastCnpTime<<endl;
-    rcvinfo.lastCnpTime = simTime();
-    rcvinfo.cnpSequence++;
-    receiver_flowMap[flowid] = rcvinfo;
-
-    sendDown(cnp);
-    scheduleAt(simTime() + min_cnp_interval, rcvinfo.cnpTimer);
+    if (!strcmp(pck->getFullName(),"CNP"))
+    {
+        receive_cnp(pck);
+    }
+    else if (string(pck->getFullName()).find("Data") != string::npos)
+    {
+        receive_data(pck);
+    }
+    else
+    {
+        sendUp(pck);
+    }
 }
 
 /*
@@ -363,8 +360,8 @@ void dcqcn::send_cnp(uint32_t flowid)
 *  currentRate as targetRate for later recovery. The values
 *  are updated as follows:
 *  targetRate = currentRate,
-*  currentRate = currentRate * (1 − alpha/2),
-*  alpha= (1− gamma) * alpha + gamma,
+*  currentRate = currentRate * (1 - α/2),
+*  alpha= (1-gamma) * alpha + gamma,
 *
 *  Initial value of alpha is 1, gamma = default(1/256) is defined by manager
 */
@@ -452,29 +449,32 @@ void dcqcn::receive_data(Packet *pck)
     sendUp(pck);
 }
 
-void dcqcn::updateAllTxRate()
+void dcqcn::send_cnp(uint32_t flowid)
 {
-    double flow_amount = sender_flowMap.size();
-    auto it = sender_flowMap.begin();
-    for(; it!=sender_flowMap.end(); ++ it)
-    {
-        sender_flowinfo flowinfo = it->second;
-        flowinfo.maxTxRate = linkspeed/flow_amount;
-        EV<<"updateTxRate(), before update, txRate = "<<flowinfo.currentRate<<", nxtSendTime = "<<
-                flowinfo.nxtSendTime<<", max TX rate = "<<flowinfo.maxTxRate<<endl;
-        if (flowinfo.currentRate > flowinfo.maxTxRate)
-        {
-            flowinfo.nxtSendTime = simTime() + (flowinfo.nxtSendTime - simTime()) *
-                    flowinfo.currentRate/flowinfo.maxTxRate; // update nxt sending time
-            flowinfo.currentRate = flowinfo.maxTxRate;   // update current TX rate
-            sender_flowMap[it->first] = flowinfo;
-            cancelEvent(flowinfo.senddata);
-            scheduleAt(flowinfo.nxtSendTime,flowinfo.senddata);
-        }
-        EV<<"updateTxRate(), after update, currentRate = "<<flowinfo.currentRate<<", nxtSendTime = "<<
-                flowinfo.nxtSendTime<<endl;
-        sender_flowMap[it->first] = flowinfo;
-    }
+    receiver_flowinfo rcvinfo = receiver_flowMap.find(flowid)->second;
+    Packet *cnp = new Packet("CNP");
+    const auto& content = makeShared<Ipv4Header>();
+    content->setChunkLength(B(16));
+    content->enableImplicitChunkSerialization = true;
+    content->setCrcMode(crcMode);
+    content->setCrc(crcNumber);
+    content->setIdentification(rcvinfo.cnpSequence);
+    cnp->insertAtFront(content);
+    cnp->setPathID(intrand(8));
+    cnp->setTimestamp(simTime());
+    cnp->setPriority(99);
+    cnp->setFlowId(flowid);
+    cnp->addTagIfAbsent<L3AddressReq>()->setDestAddress(rcvinfo.Sender_srcAddr);
+    cnp->addTagIfAbsent<L3AddressReq>()->setSrcAddress(rcvinfo.Sender_destAddr);
+    cnp->addTagIfAbsent<DispatchProtocolReq>()->setProtocol(&Protocol::ipv4);
+    cnp->addTagIfAbsent<PacketProtocolTag>()->setProtocol(&Protocol::udp);
+    EV_INFO << "Sending CNP packet to "<<flowid <<", cnp interval = "<<simTime()-rcvinfo.lastCnpTime<<endl;
+    rcvinfo.lastCnpTime = simTime();
+    rcvinfo.cnpSequence++;
+    receiver_flowMap[flowid] = rcvinfo;
+
+    sendDown(cnp);
+    scheduleAt(simTime() + min_cnp_interval, rcvinfo.cnpTimer);
 }
 
 void dcqcn::increaseTxRate(uint32_t flowid)

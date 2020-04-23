@@ -63,8 +63,8 @@ void UdpFlowApp::initialize(int stage)
 
         flowsize = flowsize*1000;
         sendInterval = double(packetLength)*8/double(linkspeed);
-        sendInterval = sendInterval/1000000;
-        sendInterval = sendInterval/multiple_of_linkspeed;
+        sendInterval = sendInterval/1000000000;
+        //sendInterval = sendInterval/multiple_of_linkspeed;
 
         burstTime = sendInterval * (flowsize/packetLength);
 
@@ -179,9 +179,18 @@ void UdpFlowApp::processStart()
 void UdpFlowApp::processSend()
 {
     sendPacket();
+    EV<<"processSend(),simtime="<<simTime()<<",sendinterval="<<sendInterval<<endl;
     simtime_t dt = simTime() + sendInterval;
 
-    if (dt < thisburst_start_time+burstTime && dt < stopTime) {
+    if (stopTime < SIMTIME_ZERO || dt < stopTime) {
+        selfMsg->setKind(SEND);
+        scheduleAt(dt, selfMsg);
+    }
+    else {
+        selfMsg->setKind(STOP);
+        scheduleAt(stopTime, selfMsg);
+    }
+    /*if (dt < thisburst_start_time+burstTime && dt < stopTime) {
         selfMsg->setKind(SEND);
         scheduleAt(dt, selfMsg);
     }
@@ -194,7 +203,7 @@ void UdpFlowApp::processSend()
     else {
         selfMsg->setKind(STOP);
         scheduleAt(stopTime, selfMsg);
-    }
+    }*/
 }
 
 void UdpFlowApp::processStop()
@@ -208,7 +217,7 @@ void UdpFlowApp::handleMessageWhenUp(cMessage *msg)
         ASSERT(msg == selfMsg);
         switch (selfMsg->getKind()) {
             case START:
-                EV<<"burstTime = "<<burstTime<<", sleepTime = "<<sleepTime<<endl;
+                //EV<<"burstTime = "<<burstTime<<", sleepTime = "<<sleepTime<<endl;
                 processStart();
                 break;
 

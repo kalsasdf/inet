@@ -186,7 +186,7 @@ void MPC::refreshDisplay() const
 // Process the message from lower layer.
 void MPC::processUpperpck(Packet *pck)
 {
-    if (string(pck->getFullName()).find("UDPBasicAppData") != string::npos || string(pck->getFullName()).find("UdpBasicAppData") != string::npos)
+    if (string(pck->getFullName()).find("UdpAppData") != string::npos || string(pck->getFullName()).find("UdpBasicAppData") != string::npos)
     {
         // determine the destination address of the pck
         auto *l3addr = pck->addTagIfAbsent<L3AddressReq>();
@@ -335,7 +335,7 @@ void MPC::processLowerpck(Packet *pck)
     {
         receive_stopcred(pck);
     }
-    else if (string(pck->getFullName()).find("UDPBasicAppData") != string::npos || string(pck->getFullName()).find("UdpBasicAppData") != string::npos)
+    else if (string(pck->getFullName()).find("UdpAppData") != string::npos || string(pck->getFullName()).find("UdpBasicAppData") != string::npos)
     {
         receive_data(pck);
     }
@@ -343,155 +343,6 @@ void MPC::processLowerpck(Packet *pck)
     {
         sendUp(pck);
     }
-}
-
-Packet *MPC::findData(L3Address addr)
-{
-    auto it = data_Map.lower_bound(addr);
-    for(; it!=data_Map.end()&&it!=data_Map.upper_bound(addr); ++ it)
-    {
-        if (addr == it->first)
-        {
-            Packet *pck = it->second;
-            const auto& payload = pck->peekAtBack<ApplicationPacket>();
-            //EV<<"findData(), packet seq = "<<payload->getSequenceNumber()<<", flow map seq = "<<sender_flowMap.find(addr)->second.seq_No<<endl;
-            if (payload->getSequenceNumber() == sender_flowMap.find(addr)->second.seq_No)
-            {
-                return pck;
-            }
-        }
-    }
-    EV << "No credit associated to this data packet."<<endl;
-    return nullptr;
-}
-
-Packet *MPC::extractData(L3Address addr)
-{
-    EV<<"credit source addr = "<<addr<<endl;
-    auto it = data_Map.lower_bound(addr);
-    for(; it!=data_Map.end()&&it!=data_Map.upper_bound(addr); ++ it)
-    {
-        Packet *pck = it->second;
-        const auto& payload = pck->peekAtBack<ApplicationPacket>();
-        EV<<"packet seq = "<<payload->getSequenceNumber()<<", flow map seq = "<<sender_flowMap.find(addr)->second.seq_No<<endl;
-        if (payload->getSequenceNumber() == sender_flowMap.find(addr)->second.seq_No-1)
-        {
-            data_Map.erase(it);
-            return pck;
-        }
-    }
-    throw cRuntimeError("a");
-    EV << "No data packet associated to this credit."<<endl;
-    return nullptr;
-}
-
-Packet *MPC::insertData(L3Address addr,Packet *pck)
-{
-
-    if (frameCapacity && int(data_Map.size()) >= frameCapacity)
-    {
-        EV << "Map full, dropping packet.\n";
-        return pck;
-    }
-    else
-    {
-        data_Map.insert(pair<L3Address,Packet*>(addr,pck));
-        emit(queueLengthSignal, int(data_Map.size()));
-        EV << "0000 data packet has been inserted into the map, map size = "<<data_Map.size()<<endl;
-        return nullptr;
-    }
-}
-
-Packet *MPC::extractCredit(L3Address addr)
-{
-    auto it = credit_Map.lower_bound(addr);
-    if (it!=credit_Map.end())
-    {
-        Packet *pck = it->second;
-        credit_Map.erase(it);
-        return pck;
-    }
-    EV << "No credit associated to this data packet."<<endl;
-    return nullptr;
-}
-
-Packet *MPC::findCredit(L3Address addr)
-{
-    auto it = credit_Map.lower_bound(addr);
-    if (it!=credit_Map.upper_bound(addr))
-    {
-        Packet *pck = it->second;
-        return pck;
-    }
-    EV << "No credit associated to this data packet."<<endl;
-    return nullptr;
-}
-
-Packet *MPC::insertCredit(L3Address addr,Packet *pck)
-{
-    if (useECN)
-    {
-        if (int(credit_Map.size()) >= 6)
-        {
-            auto it = credit_Map.begin();
-            credit_Map.erase(it);
-            credit_Map.insert(pair<L3Address,Packet*>(addr,pck));
-            EV << "insertCredit(), delete the oldest added credit"<< endl;
-            return nullptr;
-        }
-        else
-        {
-            credit_Map.insert(pair<L3Address,Packet*>(addr,pck));
-            return nullptr;
-        }
-    }
-    else
-    {
-        if (frameCapacity && int(credit_Map.size()) >= frameCapacity)
-        {
-            EV << "Map full, dropping credit.\n";
-            return pck;
-        }
-        else
-        {
-            credit_Map.insert(pair<L3Address,Packet*>(addr,pck));
-            //data_Map[addr] = pck;
-            emit(queueLengthSignal, int(credit_Map.size()));
-            EV << "0000 creidt packet has been inserted into the map, map size = "<<credit_Map.size()<<endl;
-            return nullptr;
-        }
-    }
-}
-
-Packet *MPC::newflowinfo(Packet *pck)
-{
-    auto l3addr = pck->addTagIfAbsent<L3AddressReq>();
-    Packet *info = new Packet;
-    info->addTagIfAbsent<L3AddressReq>()->setSrcAddress(l3addr->getSrcAddress());
-    info->addTagIfAbsent<L3AddressReq>()->setDestAddress(l3addr->getDestAddress());
-
-    return info;
-}
-
-int MPC::deleteFlowCredits(L3Address addr)
-{
-    int sum_deleted;
-    sum_deleted = credit_Map.count(addr);
-    credit_Map.erase(addr);
-    return sum_deleted;
-}
-
-void MPC::sendDown(Packet *pck)
-{
-    EV << "sendDown(), data map size = " << data_Map.size() << ", path ID = "<<pck->getSchedulingPriority()<<endl;
-    send(pck, outGate);
-}
-
-void MPC::sendUp(Packet *pck)
-{
-    EV<<"MPC, oh sendup!"<<endl;
-    send(pck,upGate);
-
 }
 
 void MPC::send_credreq(L3Address destaddr)
@@ -529,112 +380,6 @@ void MPC::send_credreq(L3Address destaddr)
     cred_req->insertAtFront(content);
     EV << "00000000 send credit_req, DestAddr = "<<destaddr.toIpv4()<<" !00000000"<<endl;
     sendDown(cred_req); // send down the credit_request.
-}
-
-// Generate and send credit to the destination.
-void MPC::send_credit(L3Address destaddr,unsigned int pathid, int seq)
-{
-    Packet *credit = new Packet("credit");
-
-    const auto& content = makeShared<Ipv4Header>();
-
-    //srand((unsigned)(SIMTIME_DBL(simTime())*10000000000));
-    int jitter_bytes = intrand(6)+1;
-
-    EV<<"send_credit, the jitter bytes = "<<jitter_bytes<<", credit seq = "<<seq<<endl;
-    //jitter_bytes = 4;
-
-    content->setChunkLength(b(208+jitter_bytes*8));
-    content->enableImplicitChunkSerialization = true;
-    content->setCrcMode(crcMode);
-    content->setCrc(0);
-    content->setIdentification(seq);
-
-    //content->setDiffServCodePoint(rand()%256);
-    //content->setDiffServCodePoint(pathid);
-    switch (crcMode) {
-        case CRC_DECLARED_CORRECT:
-            // if the CRC mode is declared to be correct, then set the CRC to an easily recognizable value
-            content->setCrc(0xC00D);
-            break;
-        case CRC_DECLARED_INCORRECT:
-            // if the CRC mode is declared to be incorrect, then set the CRC to an easily recognizable value
-            content->setCrc(0xBAAD);
-            break;
-        case CRC_COMPUTED: {
-            content->setCrc(0);
-            // crc will be calculated in fragmentAndSend()
-            break;
-        }
-        default:
-            throw cRuntimeError("Unknown CRC mode");
-    }
-    credit->insertAtFront(content);
-
-    if (randomspreading)
-    {
-        pathid = intrand(sumpaths)+1;
-        //pathid = rand()%sumpaths+1;
-    }
-    else
-    {
-        size_t value1 = hash<unsigned int>{}((unsigned int)rcvsrc.toIpv4().getInt());
-        size_t value2 = hash<unsigned int>{}((unsigned int)destaddr.toIpv4().getInt());
-        pathid = hash<unsigned int>{}((value1+value2));
-        EV<<"value1 = "<<value1<<", value2 = "<<value2<<", hashed id = "<<pathid<<endl;
-        pathid = pathid%9;
-        pathid = pathid%sumpaths + 1;
-    }
-    credit->setSchedulingPriority(pathid);
-
-    //credit->setSchedulingPriority(pathid);
-    credit->setTimestamp(simTime());
-    credit->addTagIfAbsent<L3AddressReq>()->setDestAddress(destaddr);
-    credit->addTagIfAbsent<L3AddressReq>()->setSrcAddress(rcvsrc);
-    credit->addTagIfAbsent<DscpReq>()->setDifferentiatedServicesCodePoint(0x2E);
-    credit->addTagIfAbsent<DispatchProtocolReq>()->setProtocol(&Protocol::ipv4);
-    credit->addTagIfAbsent<PacketProtocolTag>()->setProtocol(&Protocol::udp);
-
-    EV << "00000000 send credit, DestAddr = "<<destaddr.toIpv4()<<", dscp value = "<<credit->addTagIfAbsent<DscpReq>()->getDifferentiatedServicesCodePoint()<<", random path = "<<pathid<<endl;
-    sendDown(credit); // send down the credit
-}
-
-// Generate and send stop credit Packet to the destination.
-void MPC::send_stop(L3Address addr)
-{
-    Packet *cred_stop = new Packet("credit_stop");
-    cred_stop->addTagIfAbsent<L3AddressReq>()->setDestAddress(addr);
-    cred_stop->addTagIfAbsent<L3AddressReq>()->setSrcAddress(sndsrc);
-    cred_stop->addTagIfAbsent<DscpReq>()->setDifferentiatedServicesCodePoint(0x1A);
-    cred_stop->setTimestamp(simTime());
-    cred_stop->addTagIfAbsent<DispatchProtocolReq>()->setProtocol(&Protocol::ipv4);
-    cred_stop->addTagIfAbsent<PacketProtocolTag>()->setProtocol(&Protocol::udp);
-
-    const auto& content = makeShared<Ipv4Header>();
-    content->setChunkLength(b(32));
-    content->enableImplicitChunkSerialization = true;
-    content->setCrcMode(crcMode);
-    content->setCrc(0);
-    switch (crcMode) {
-        case CRC_DECLARED_CORRECT:
-            // if the CRC mode is declared to be correct, then set the CRC to an easily recognizable value
-            content->setCrc(0xC00D);
-            break;
-        case CRC_DECLARED_INCORRECT:
-            // if the CRC mode is declared to be incorrect, then set the CRC to an easily recognizable value
-            content->setCrc(0xBAAD);
-            break;
-        case CRC_COMPUTED: {
-            content->setCrc(0);
-            // crc will be calculated in fragmentAndSend()
-            break;
-        }
-        default:
-            throw cRuntimeError("Unknown CRC mode");
-    }
-    cred_stop->insertAtFront(content);
-    EV << "00000000 send credit_stop, DestAddr = "<<addr.toIpv4()<<" !00000000"<<endl;
-    sendDown(cred_stop); // send down the credit_stop.
 }
 
 // Receive the SYN packet from the sender, and begin sending credit.
@@ -721,6 +466,165 @@ void MPC::receive_credreq(Packet *pck)
         scheduleAt(simTime(),sendcredit);
     }
     EV<<"0000 The size of delayMap = "<< delayMap.size()<<endl;
+}
+
+// Handle the self message: send credit.
+void MPC::self_send_credit()
+{
+    if (CreState != STOP_CREDIT_STATE)
+    {
+        delta_cdt_time = simTime() - last_cdt_time;
+        EV <<"0000 time gap between sending credits = "<< delta_cdt_time << endl;
+        schedule_next_credit(delta_cdt_time);
+    }
+}
+
+void MPC::schedule_next_credit(simtime_t delta_t)
+{
+    // for multi-path transmitting
+
+    receiver_mpinfo mp_info = receiver_mpMap.find(next_creditaddr)->second;
+    simtime_t min_t= 100000;
+    int mpindex = -1;
+    int mpsum = mp_info.virtualpaths;
+    double time_jitter = 0;
+    double sum_speed = 0;
+
+    //int mpsum = mp_info.virtualpaths;
+    EV<<"0000 the multi-paths size = "<<mpsum<<", for address"<<next_creditaddr.toIpv4()<<endl;
+    for (int i=0;i<mpsum;i++)
+    {
+        mp_info.next_time[i] = mp_info.next_time[i] - delta_t;
+        if (mp_info.next_time[i] == 0)
+        {
+            mp_info.next_time[i] = credit_size/mp_info.speed[i] + time_jitter; // will minus delta_t in following
+            mpindex = i;
+        }
+        else
+        {
+            mp_info.next_time[i] = mp_info.next_time[i] + time_jitter; // will minus delta_t in following
+        }
+        if (mp_info.next_time[i] < min_t)
+        {
+            min_t = mp_info.next_time[i];
+        }
+        mp_info.next_time[i] = mp_info.next_time[i] + delta_t;
+        sum_speed  = mp_info.speed[i] + sum_speed;
+    }
+
+    EV<<"schedule_nextcdt(), the current sum_speed of the flow = "<<sum_speed<<endl;
+    // send the current credit before scheduling the next credit.
+    auto f_it = receiver_flowMap.find(next_creditaddr);
+    receiver_flowinfo f_info = f_it->second;
+    if (mpindex != -1) // mpMap has been updated during scheduling. multipath_control() has been called
+    {
+        send_credit(next_creditaddr, mp_info.path_id[mpindex], f_info.creditseq);
+    }
+    ////////////////////////////////////
+    last_cdt_time = simTime();
+
+    f_info.creditseq = f_info.creditseq + 1;
+    receiver_flowMap[next_creditaddr] = f_info;
+    receiver_mpMap[next_creditaddr] = mp_info;
+
+    EV<<"0000 the delay map size = "<<delayMap.size()<<endl;
+
+    // add delta_t before minus it, and then the delay value can be the new min_t.
+    delayMap[next_creditaddr] = min_t + delta_t;
+
+    double avg_next_time = 0;
+    auto d_it = delayMap.begin();
+    for(; d_it != delayMap.end(); ++ d_it)
+    {
+        delayMap[d_it->first] = d_it->second - delta_t;
+        receiver_mpinfo tmpinfo = receiver_mpMap.find(d_it->first)->second;
+        for (int i=0; i<tmpinfo.virtualpaths; i++)
+        {
+            tmpinfo.next_time[i] = tmpinfo.next_time[i] - delta_t;
+            receiver_mpMap[d_it->first] = tmpinfo;
+            avg_next_time = credit_size/tmpinfo.next_time[i] + avg_next_time;
+        }
+    }
+
+    //avg_next_time = avg_next_time/maxrate;
+    EV<<"schedule_nextcdt(), the current next size packet of the flow ="<<avg_next_time<<endl;
+
+    find_nextaddr();
+
+    EV <<" 00000000 The next delay = "<<next_cdt_delay<<", the next scheduled packet "<<next_creditaddr<<endl;
+
+    delta_cdt_time = next_cdt_delay;
+
+    scheduleAt(simTime()+next_cdt_delay,sendcredit);
+
+}
+
+// Generate and send credit to the destination.
+void MPC::send_credit(L3Address destaddr,unsigned int pathid, int seq)
+{
+    Packet *credit = new Packet("credit");
+
+    const auto& content = makeShared<Ipv4Header>();
+
+    //srand((unsigned)(SIMTIME_DBL(simTime())*10000000000));
+    int jitter_bytes = intrand(6)+1;
+
+    EV<<"send_credit, the jitter bytes = "<<jitter_bytes<<", credit seq = "<<seq<<endl;
+    //jitter_bytes = 4;
+
+    content->setChunkLength(b(208+jitter_bytes*8));
+    content->enableImplicitChunkSerialization = true;
+    content->setCrcMode(crcMode);
+    content->setCrc(0);
+    content->setIdentification(seq);
+
+    //content->setDiffServCodePoint(rand()%256);
+    //content->setDiffServCodePoint(pathid);
+    switch (crcMode) {
+        case CRC_DECLARED_CORRECT:
+            // if the CRC mode is declared to be correct, then set the CRC to an easily recognizable value
+            content->setCrc(0xC00D);
+            break;
+        case CRC_DECLARED_INCORRECT:
+            // if the CRC mode is declared to be incorrect, then set the CRC to an easily recognizable value
+            content->setCrc(0xBAAD);
+            break;
+        case CRC_COMPUTED: {
+            content->setCrc(0);
+            // crc will be calculated in fragmentAndSend()
+            break;
+        }
+        default:
+            throw cRuntimeError("Unknown CRC mode");
+    }
+    credit->insertAtFront(content);
+
+    if (randomspreading)
+    {
+        pathid = intrand(sumpaths)+1;
+        //pathid = rand()%sumpaths+1;
+    }
+    else
+    {
+        size_t value1 = hash<unsigned int>{}((unsigned int)rcvsrc.toIpv4().getInt());
+        size_t value2 = hash<unsigned int>{}((unsigned int)destaddr.toIpv4().getInt());
+        pathid = hash<unsigned int>{}((value1+value2));
+        EV<<"value1 = "<<value1<<", value2 = "<<value2<<", hashed id = "<<pathid<<endl;
+        pathid = pathid%9;
+        pathid = pathid%sumpaths + 1;
+    }
+    credit->setSchedulingPriority(pathid);
+
+    //credit->setSchedulingPriority(pathid);
+    credit->setTimestamp(simTime());
+    credit->addTagIfAbsent<L3AddressReq>()->setDestAddress(destaddr);
+    credit->addTagIfAbsent<L3AddressReq>()->setSrcAddress(rcvsrc);
+    credit->addTagIfAbsent<DscpReq>()->setDifferentiatedServicesCodePoint(0x2E);
+    credit->addTagIfAbsent<DispatchProtocolReq>()->setProtocol(&Protocol::ipv4);
+    credit->addTagIfAbsent<PacketProtocolTag>()->setProtocol(&Protocol::udp);
+
+    EV << "00000000 send credit, DestAddr = "<<destaddr.toIpv4()<<", dscp value = "<<credit->addTagIfAbsent<DscpReq>()->getDifferentiatedServicesCodePoint()<<", random path = "<<pathid<<endl;
+    sendDown(credit); // send down the credit
 }
 
 // Receive the credit, and send corresponding TCP segment.
@@ -857,14 +761,6 @@ void MPC::receive_credit(Packet *pck)
             }
         }
     }
-}
-
-// Receive the stop credit Packet from sender, and stop sending credit.
-void MPC::receive_stopcred(Packet *pck)
-{
-    EV<<"0000 entering receivestop_cdt"<<endl;
-    stop_addr = pck->addTagIfAbsent<L3AddressInd>()->getSrcAddress();
-    scheduleAt(simTime(),stopcredit); //schedule selfmessage
 }
 
 // Receive the TCP segment, determine the credit loss ratio and enter the feedback control.
@@ -1206,6 +1102,201 @@ void MPC::receive_data(Packet *pck)
     ////
 }
 
+// Generate and send stop credit Packet to the destination.
+void MPC::send_stop(L3Address addr)
+{
+    Packet *cred_stop = new Packet("credit_stop");
+    cred_stop->addTagIfAbsent<L3AddressReq>()->setDestAddress(addr);
+    cred_stop->addTagIfAbsent<L3AddressReq>()->setSrcAddress(sndsrc);
+    cred_stop->addTagIfAbsent<DscpReq>()->setDifferentiatedServicesCodePoint(0x1A);
+    cred_stop->setTimestamp(simTime());
+    cred_stop->addTagIfAbsent<DispatchProtocolReq>()->setProtocol(&Protocol::ipv4);
+    cred_stop->addTagIfAbsent<PacketProtocolTag>()->setProtocol(&Protocol::udp);
+
+    const auto& content = makeShared<Ipv4Header>();
+    content->setChunkLength(b(32));
+    content->enableImplicitChunkSerialization = true;
+    content->setCrcMode(crcMode);
+    content->setCrc(0);
+    switch (crcMode) {
+        case CRC_DECLARED_CORRECT:
+            // if the CRC mode is declared to be correct, then set the CRC to an easily recognizable value
+            content->setCrc(0xC00D);
+            break;
+        case CRC_DECLARED_INCORRECT:
+            // if the CRC mode is declared to be incorrect, then set the CRC to an easily recognizable value
+            content->setCrc(0xBAAD);
+            break;
+        case CRC_COMPUTED: {
+            content->setCrc(0);
+            // crc will be calculated in fragmentAndSend()
+            break;
+        }
+        default:
+            throw cRuntimeError("Unknown CRC mode");
+    }
+    cred_stop->insertAtFront(content);
+    EV << "00000000 send credit_stop, DestAddr = "<<addr.toIpv4()<<" !00000000"<<endl;
+    sendDown(cred_stop); // send down the credit_stop.
+}
+
+// Receive the stop credit Packet from sender, and stop sending credit.
+void MPC::receive_stopcred(Packet *pck)
+{
+    EV<<"0000 entering receivestop_cdt"<<endl;
+    stop_addr = pck->addTagIfAbsent<L3AddressInd>()->getSrcAddress();
+    scheduleAt(simTime(),stopcredit); //schedule selfmessage
+}
+
+Packet *MPC::findData(L3Address addr)
+{
+    auto it = data_Map.lower_bound(addr);
+    for(; it!=data_Map.end()&&it!=data_Map.upper_bound(addr); ++ it)
+    {
+        if (addr == it->first)
+        {
+            Packet *pck = it->second;
+            const auto& payload = pck->peekAtBack<ApplicationPacket>();
+            //EV<<"findData(), packet seq = "<<payload->getSequenceNumber()<<", flow map seq = "<<sender_flowMap.find(addr)->second.seq_No<<endl;
+            if (payload->getSequenceNumber() == sender_flowMap.find(addr)->second.seq_No)
+            {
+                return pck;
+            }
+        }
+    }
+    EV << "No credit associated to this data packet."<<endl;
+    return nullptr;
+}
+
+Packet *MPC::extractData(L3Address addr)
+{
+    EV<<"credit source addr = "<<addr<<endl;
+    auto it = data_Map.lower_bound(addr);
+    for(; it!=data_Map.end()&&it!=data_Map.upper_bound(addr); ++ it)
+    {
+        Packet *pck = it->second;
+        const auto& payload = pck->peekAtBack<ApplicationPacket>();
+        EV<<"packet seq = "<<payload->getSequenceNumber()<<", flow map seq = "<<sender_flowMap.find(addr)->second.seq_No<<endl;
+        if (payload->getSequenceNumber() == sender_flowMap.find(addr)->second.seq_No-1)
+        {
+            data_Map.erase(it);
+            return pck;
+        }
+    }
+    throw cRuntimeError("a");
+    EV << "No data packet associated to this credit."<<endl;
+    return nullptr;
+}
+
+Packet *MPC::insertData(L3Address addr,Packet *pck)
+{
+
+    if (frameCapacity && int(data_Map.size()) >= frameCapacity)
+    {
+        EV << "Map full, dropping packet.\n";
+        return pck;
+    }
+    else
+    {
+        data_Map.insert(pair<L3Address,Packet*>(addr,pck));
+        emit(queueLengthSignal, int(data_Map.size()));
+        EV << "0000 data packet has been inserted into the map, map size = "<<data_Map.size()<<endl;
+        return nullptr;
+    }
+}
+
+Packet *MPC::extractCredit(L3Address addr)
+{
+    auto it = credit_Map.lower_bound(addr);
+    if (it!=credit_Map.end())
+    {
+        Packet *pck = it->second;
+        credit_Map.erase(it);
+        return pck;
+    }
+    EV << "No credit associated to this data packet."<<endl;
+    return nullptr;
+}
+
+Packet *MPC::findCredit(L3Address addr)
+{
+    auto it = credit_Map.lower_bound(addr);
+    if (it!=credit_Map.upper_bound(addr))
+    {
+        Packet *pck = it->second;
+        return pck;
+    }
+    EV << "No credit associated to this data packet."<<endl;
+    return nullptr;
+}
+
+Packet *MPC::insertCredit(L3Address addr,Packet *pck)
+{
+    if (useECN)
+    {
+        if (int(credit_Map.size()) >= 6)
+        {
+            auto it = credit_Map.begin();
+            credit_Map.erase(it);
+            credit_Map.insert(pair<L3Address,Packet*>(addr,pck));
+            EV << "insertCredit(), delete the oldest added credit"<< endl;
+            return nullptr;
+        }
+        else
+        {
+            credit_Map.insert(pair<L3Address,Packet*>(addr,pck));
+            return nullptr;
+        }
+    }
+    else
+    {
+        if (frameCapacity && int(credit_Map.size()) >= frameCapacity)
+        {
+            EV << "Map full, dropping credit.\n";
+            return pck;
+        }
+        else
+        {
+            credit_Map.insert(pair<L3Address,Packet*>(addr,pck));
+            //data_Map[addr] = pck;
+            emit(queueLengthSignal, int(credit_Map.size()));
+            EV << "0000 creidt packet has been inserted into the map, map size = "<<credit_Map.size()<<endl;
+            return nullptr;
+        }
+    }
+}
+
+Packet *MPC::newflowinfo(Packet *pck)
+{
+    auto l3addr = pck->addTagIfAbsent<L3AddressReq>();
+    Packet *info = new Packet;
+    info->addTagIfAbsent<L3AddressReq>()->setSrcAddress(l3addr->getSrcAddress());
+    info->addTagIfAbsent<L3AddressReq>()->setDestAddress(l3addr->getDestAddress());
+
+    return info;
+}
+
+int MPC::deleteFlowCredits(L3Address addr)
+{
+    int sum_deleted;
+    sum_deleted = credit_Map.count(addr);
+    credit_Map.erase(addr);
+    return sum_deleted;
+}
+
+void MPC::sendDown(Packet *pck)
+{
+    EV << "sendDown(), data map size = " << data_Map.size() << ", path ID = "<<pck->getSchedulingPriority()<<endl;
+    send(pck, outGate);
+}
+
+void MPC::sendUp(Packet *pck)
+{
+    EV<<"MPC, oh sendup!"<<endl;
+    send(pck,upGate);
+
+}
+
 bool MPC::orderpackets(L3Address addr)
 {
     // ordering the data packets in the ordering map
@@ -1231,17 +1322,6 @@ bool MPC::orderpackets(L3Address addr)
         }
     }
     return false;
-}
-
-// Handle the self message: send credit.
-void MPC::self_send_credit()
-{
-    if (CreState != STOP_CREDIT_STATE)
-    {
-        delta_cdt_time = simTime() - last_cdt_time;
-        EV <<"0000 time gap between sending credits = "<< delta_cdt_time << endl;
-        schedule_next_credit(delta_cdt_time);
-    }
 }
 
 // Handle the self message stop credit.
@@ -1287,86 +1367,6 @@ void MPC::self_stop_credit()
         last_cdt_time = simTime();
         scheduleAt(simTime() + next_cdt_delay,sendcredit);
     }
-}
-
-void MPC::schedule_next_credit(simtime_t delta_t)
-{
-    // for multi-path transmitting
-
-    receiver_mpinfo mp_info = receiver_mpMap.find(next_creditaddr)->second;
-    simtime_t min_t= 100000;
-    int mpindex = -1;
-    int mpsum = mp_info.virtualpaths;
-    double time_jitter = 0;
-    double sum_speed = 0;
-
-    //int mpsum = mp_info.virtualpaths;
-    EV<<"0000 the multi-paths size = "<<mpsum<<", for address"<<next_creditaddr.toIpv4()<<endl;
-    for (int i=0;i<mpsum;i++)
-    {
-        mp_info.next_time[i] = mp_info.next_time[i] - delta_t;
-        if (mp_info.next_time[i] == 0)
-        {
-            mp_info.next_time[i] = credit_size/mp_info.speed[i] + time_jitter; // will minus delta_t in following
-            mpindex = i;
-        }
-        else
-        {
-            mp_info.next_time[i] = mp_info.next_time[i] + time_jitter; // will minus delta_t in following
-        }
-        if (mp_info.next_time[i] < min_t)
-        {
-            min_t = mp_info.next_time[i];
-        }
-        mp_info.next_time[i] = mp_info.next_time[i] + delta_t;
-        sum_speed  = mp_info.speed[i] + sum_speed;
-    }
-
-    EV<<"schedule_nextcdt(), the current sum_speed of the flow = "<<sum_speed<<endl;
-    // send the current credit before scheduling the next credit.
-    auto f_it = receiver_flowMap.find(next_creditaddr);
-    receiver_flowinfo f_info = f_it->second;
-    if (mpindex != -1) // mpMap has been updated during scheduling. multipath_control() has been called
-    {
-        send_credit(next_creditaddr, mp_info.path_id[mpindex], f_info.creditseq);
-    }
-    ////////////////////////////////////
-    last_cdt_time = simTime();
-
-    f_info.creditseq = f_info.creditseq + 1;
-    receiver_flowMap[next_creditaddr] = f_info;
-    receiver_mpMap[next_creditaddr] = mp_info;
-
-    EV<<"0000 the delay map size = "<<delayMap.size()<<endl;
-
-    // add delta_t before minus it, and then the delay value can be the new min_t.
-    delayMap[next_creditaddr] = min_t + delta_t;
-
-    double avg_next_time = 0;
-    auto d_it = delayMap.begin();
-    for(; d_it != delayMap.end(); ++ d_it)
-    {
-        delayMap[d_it->first] = d_it->second - delta_t;
-        receiver_mpinfo tmpinfo = receiver_mpMap.find(d_it->first)->second;
-        for (int i=0; i<tmpinfo.virtualpaths; i++)
-        {
-            tmpinfo.next_time[i] = tmpinfo.next_time[i] - delta_t;
-            receiver_mpMap[d_it->first] = tmpinfo;
-            avg_next_time = credit_size/tmpinfo.next_time[i] + avg_next_time;
-        }
-    }
-
-    //avg_next_time = avg_next_time/maxrate;
-    EV<<"schedule_nextcdt(), the current next size packet of the flow ="<<avg_next_time<<endl;
-
-    find_nextaddr();
-
-    EV <<" 00000000 The next delay = "<<next_cdt_delay<<", the next scheduled packet "<<next_creditaddr<<endl;
-
-    delta_cdt_time = next_cdt_delay;
-
-    scheduleAt(simTime()+next_cdt_delay,sendcredit);
-
 }
 
 void MPC::find_nextaddr()

@@ -29,7 +29,7 @@ simple MPC
         int frameCapacity = default(10000000);
         int bits_timeout = default(100000);
         bool activate = default(false);
- 		double linkspeed = default(10^9);
+ 		double linkspeed @unit(Gbps) = default (10Gbps);
   	   	string crcMode @enum("declared", "computed") = default("declared");
         string interfaceTableModule;   // The path to the InterfaceTable module
         bool enableMP = default(false);
