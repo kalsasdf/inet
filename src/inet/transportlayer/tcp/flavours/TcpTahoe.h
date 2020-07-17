@@ -57,7 +57,7 @@ class INET_API TcpTahoe : public TcpTahoeRenoFamily
     TcpTahoe();
 
     /** Redefine what should happen when data got acked, to add congestion window management */
-    virtual void receivedDataAck(uint32 firstSeqAcked) override;
+    virtual void receivedDataAck(uint32 firstSeqAcked,bool ecn) override;
 
     /** Redefine what should happen when dupAck was received, to add congestion window management */
     virtual void receivedDuplicateAck() override;

@@ -85,8 +85,11 @@ void MPC::initialize()
     {
         targetratio = 0.125;
     }
+    targetecnratio=0.125;
     wmax = 0.5;
     wmin = 0.01;
+    modethreshold=3;
+    index=0;
 
     if (multipath)
     {
@@ -115,7 +118,7 @@ void MPC::initialize()
     // Used for judging the end of flow.
     this->max_idletime = bits_timeout/linkspeed;
     // this->max_idletime = 0.002;
-    treceiver_flowinfo = {simTime(),0,0,1,0,0,0,0.125,0,0,currate,currate,currate,false};
+    treceiver_flowinfo = {simTime(),0,0,1,0,0,0,0.125,0,0,0.0625,0,0,currate,currate,currate,false};
     tsender_flowinfo = {simTime(),0,false};
     tsender_tokeninfo = {0,0,0,0,0,simTime()};
 
@@ -220,8 +223,14 @@ void MPC::processUpperpck(Packet *pck)
         if (useTokens)
         {
             sender_tokeninfo tokeninfo = sender_tokens.find(tdest)->second;
+            sender_flowinfo snd_info = sender_flowMap.find(tdest)->second;
             if (!data_Map.empty())
             {
+                /*long int seqno = snd_info.seq[snd_info.seq_No] + 1;
+                snd_info.seq_No++;
+                snd_info.seq[snd_info.seq_No] = seqno;
+                sender_flowMap[tdest] = snd_info;*/
+
                 EV<<"data_Map is not empty, directly insert this packet into data map!"<<endl;
                 pck->setArrivalTime(simTime());
                 cMessage *droppedpck = insertData(tdest,pck);
@@ -233,15 +242,15 @@ void MPC::processUpperpck(Packet *pck)
             }
             else if (pck->getByteLength() <= tokeninfo.tokens)
             {
-                sender_flowinfo snd_info = sender_flowMap.find(tdest)->second;
-                long int seqno = snd_info.seq_No + 1;
-                snd_info.seq_No = seqno;
-                sender_flowMap[tdest] = snd_info;
+               /* long int seqno = snd_info.seq_No[index] + 1;
+                index++;
+                snd_info.seq_No[index] = seqno;
+                sender_flowMap[tdest] = snd_info;*/
 
                 tokeninfo.tokens -= pck->getByteLength();
                 const auto& data_head = makeShared<Ipv4Header>();
                 data_head->setChunkLength(b(32));
-                data_head->setIdentification(seqno);
+                //data_head->setIdentification(seqno);
                 data_head->setDiffServCodePoint(11);
                 if (uniform(0,1) < tokeninfo.EcnPrtt)
                 {
@@ -260,6 +269,11 @@ void MPC::processUpperpck(Packet *pck)
             }
             else
             {
+               /* long int seqno = snd_info.seq_No[index] + 1;
+                index++;
+                snd_info.seq_No[index] = seqno;
+                sender_flowMap[tdest] = snd_info;*/
+
                 EV<<"Tokens = "<<tokeninfo.tokens<<" are not enough for this packet = "<< pck->getByteLength() <<" transmission."<<endl;
                 pck->setArrivalTime(simTime());
                 cMessage *droppedpck = insertData(tdest,pck);
@@ -317,6 +331,23 @@ void MPC::processUpperpck(Packet *pck)
     else
     {
         sendDown(pck);
+    }
+}
+
+Packet *MPC::insertData(L3Address addr,Packet *pck)
+{
+
+    if (frameCapacity && int(data_Map.size()) >= frameCapacity)
+    {
+        EV << "Map full, dropping packet.\n";
+        return pck;
+    }
+    else
+    {
+        data_Map.insert(pair<L3Address,Packet*>(addr,pck));
+        emit(queueLengthSignal, int(data_Map.size()));
+        EV << "0000 data packet has been inserted into the map, map size = "<<data_Map.size()<<endl;
+        return nullptr;
     }
 }
 
@@ -763,6 +794,26 @@ void MPC::receive_credit(Packet *pck)
     }
 }
 
+Packet *MPC::findData(L3Address addr)
+{
+    auto it = data_Map.lower_bound(addr);
+    for(; it!=data_Map.end()&&it!=data_Map.upper_bound(addr); ++ it)
+    {
+        if (addr == it->first)
+        {
+            Packet *pck = it->second;
+            const auto& payload = pck->peekAtBack<ApplicationPacket>();
+            EV<<"findData(), packet seq = "<<payload->getSequenceNumber()<<", flow map seq = "<<sender_flowMap.find(addr)->second.seq_No<<endl;
+            if (payload->getSequenceNumber() == sender_flowMap.find(addr)->second.seq_No)
+            {
+                return pck;
+            }
+        }
+    }
+    EV << "findData(),No credit associated to this data packet."<<endl;
+    return nullptr;
+}
+
 // Receive the TCP segment, determine the credit loss ratio and enter the feedback control.
 void MPC::receive_data(Packet *pck)
 {
@@ -949,12 +1000,20 @@ void MPC::receive_data(Packet *pck)
             // Calculate the credit loss ratio, and enter the feedback control.
             if ((simTime()-tinfo.last_Fbtime) < 1*tinfo.nowRTT)
             {
-                tinfo.pck_in_rtt++;
+                tinfo.pck_in_rtt++;//zengtian
+                if (data_head->getExplicitCongestionNotification() == 3)
+                {
+                    tinfo.ecn_in_rtt++;
+                }
                 receiver_flowMap[l3addr->getSrcAddress()] = tinfo;
             }
             else
             {
-                tinfo.pck_in_rtt++;
+                tinfo.pck_in_rtt++;//zengtian
+                if (data_head->getExplicitCongestionNotification() == 3)
+                {
+                    tinfo.ecn_in_rtt++;
+                }
                 tinfo.sumlost = tinfo.nowseq - tinfo.lastseq - tinfo.pck_in_rtt;
                 double lossratio = double(tinfo.sumlost)/double(tinfo.nowseq - tinfo.lastseq);
                 EV<<"receive_data(), sumlost = "<<tinfo.sumlost<<", nowseq = "<<tinfo.nowseq<<", lastseq = "<<tinfo.lastseq<<", pck_in_rtt = "<<tinfo.pck_in_rtt<<endl;
@@ -1148,26 +1207,6 @@ void MPC::receive_stopcred(Packet *pck)
     scheduleAt(simTime(),stopcredit); //schedule selfmessage
 }
 
-Packet *MPC::findData(L3Address addr)
-{
-    auto it = data_Map.lower_bound(addr);
-    for(; it!=data_Map.end()&&it!=data_Map.upper_bound(addr); ++ it)
-    {
-        if (addr == it->first)
-        {
-            Packet *pck = it->second;
-            const auto& payload = pck->peekAtBack<ApplicationPacket>();
-            //EV<<"findData(), packet seq = "<<payload->getSequenceNumber()<<", flow map seq = "<<sender_flowMap.find(addr)->second.seq_No<<endl;
-            if (payload->getSequenceNumber() == sender_flowMap.find(addr)->second.seq_No)
-            {
-                return pck;
-            }
-        }
-    }
-    EV << "No credit associated to this data packet."<<endl;
-    return nullptr;
-}
-
 Packet *MPC::extractData(L3Address addr)
 {
     EV<<"credit source addr = "<<addr<<endl;
@@ -1186,23 +1225,6 @@ Packet *MPC::extractData(L3Address addr)
     throw cRuntimeError("a");
     EV << "No data packet associated to this credit."<<endl;
     return nullptr;
-}
-
-Packet *MPC::insertData(L3Address addr,Packet *pck)
-{
-
-    if (frameCapacity && int(data_Map.size()) >= frameCapacity)
-    {
-        EV << "Map full, dropping packet.\n";
-        return pck;
-    }
-    else
-    {
-        data_Map.insert(pair<L3Address,Packet*>(addr,pck));
-        emit(queueLengthSignal, int(data_Map.size()));
-        EV << "0000 data packet has been inserted into the map, map size = "<<data_Map.size()<<endl;
-        return nullptr;
-    }
 }
 
 Packet *MPC::extractCredit(L3Address addr)

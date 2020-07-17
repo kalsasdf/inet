@@ -526,7 +526,7 @@ void TcpBaseAlg::receiveSeqChanged()
     }
 }
 
-void TcpBaseAlg::receivedDataAck(uint32 firstSeqAcked)
+void TcpBaseAlg::receivedDataAck(uint32 firstSeqAcked,bool ecn)
 {
     if (!state->ts_enabled) {
         // if round-trip time measurement is running, check if rtseq has been acked

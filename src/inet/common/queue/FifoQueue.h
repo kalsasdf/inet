@@ -23,6 +23,66 @@
 #include "inet/common/queue/PassiveQueueBase.h"
 #include "inet/common/queue/IQueueAccess.h"
 
+#include "inet/applications/common/SocketTag_m.h"
+
+#include "inet/common/ProtocolTag_m.h"
+#include "inet/common/checksum/EthernetCRC.h"
+#include "inet/common/IProtocolRegistrationListener.h"
+#include "inet/common/lifecycle/ILifecycle.h"
+#include "inet/common/queue/QueueBase.h"
+#include "inet/common/INETUtils.h"
+#include "inet/common/IProtocolRegistrationListener.h"
+#include "inet/common/LayeredProtocolBase.h"
+#include "inet/common/lifecycle/NodeOperations.h"
+#include "inet/common/lifecycle/NodeStatus.h"
+#include "inet/common/ModuleAccess.h"
+#include "inet/common/packet/Message.h"
+#include "inet/common/ProtocolTag_m.h"
+#include "inet/common/checksum/TcpIpChecksum.h"
+#include "inet/common/INETDefs.h"
+#include "inet/common/INETMath.h"
+#include "inet/common/lifecycle/ILifecycle.h"
+#include "inet/common/TagBase_m.h"
+#include "inet/common/queue/QueueBase.h"
+#include "inet/common/queue/PassiveQueueBase.h"
+
+#include "inet/linklayer/common/FcsMode_m.h"
+#include "inet/linklayer/common/Ieee802Ctrl.h"
+#include "inet/linklayer/common/Ieee802SapTag_m.h"
+#include "inet/linklayer/common/InterfaceTag_m.h"
+#include "inet/linklayer/common/MacAddressTag_m.h"
+#include "inet/linklayer/ethernet/EtherEncap.h"
+#include "inet/linklayer/ethernet/EtherFrame_m.h"
+#include "inet/linklayer/ethernet/EtherPhyFrame_m.h"
+#include "inet/linklayer/ieee8022/Ieee8022LlcHeader_m.h"
+
+
+#include "inet/networklayer/contract/IInterfaceTable.h"
+#include "inet/networklayer/contract/IArp.h"
+#include "inet/networklayer/ipv4/Icmp.h"
+#include "inet/networklayer/contract/INetfilter.h"
+#include "inet/networklayer/contract/INetworkProtocol.h"
+#include "inet/networklayer/ipv4/Ipv4Header_m.h"
+#include "inet/networklayer/ipv4/Ipv4FragBuf.h"
+#include "inet/networklayer/ipv4/Ipv4RoutingTable.h"
+#include "inet/networklayer/arp/ipv4/ArpPacket_m.h"
+#include "inet/networklayer/common/DscpTag_m.h"
+#include "inet/networklayer/common/EcnTag_m.h"
+#include "inet/networklayer/common/FragmentationTag_m.h"
+#include "inet/networklayer/common/HopLimitTag_m.h"
+#include "inet/networklayer/common/L3AddressTag_m.h"
+#include "inet/networklayer/common/L3Tools.h"
+#include "inet/networklayer/common/MulticastTag_m.h"
+#include "inet/networklayer/common/NextHopAddressTag_m.h"
+#include "inet/networklayer/contract/IArp.h"
+#include "inet/networklayer/contract/IInterfaceTable.h"
+#include "inet/networklayer/contract/ipv4/Ipv4SocketCommand_m.h"
+#include "inet/networklayer/ipv4/IcmpHeader_m.h"
+#include "inet/networklayer/ipv4/Ipv4.h"
+#include "inet/networklayer/ipv4/Ipv4Header_m.h"
+#include "inet/networklayer/ipv4/Ipv4InterfaceData.h"
+#include "inet/networklayer/common/L3Address.h"
+
 namespace inet {
 
 /**
@@ -34,13 +94,18 @@ class INET_API FifoQueue : public PassiveQueueBase, public IQueueAccess
     // state
     cQueue queue;
     cGate *outGate;
-    int byteLength;
+    double kmin;
+    double kmax;
+    double pmax;
+    //int byteLength;
+    bool enableEcn;
 
     // statistics
     static simsignal_t queueLengthSignal;
+    static simsignal_t bufferOccupancySignal;
 
   public:
-    FifoQueue() : outGate(nullptr), byteLength(0) {}
+    //FifoQueue() : outGate(nullptr), byteLength(0) {}
 
   protected:
     virtual void initialize() override;

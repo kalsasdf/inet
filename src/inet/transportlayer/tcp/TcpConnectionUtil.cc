@@ -727,6 +727,7 @@ bool TcpConnection::sendData(bool fullSegmentsOnly, uint32 congestionWindow)
 
     // maxWindow is minimum of snd_wnd and congestionWindow (snd_cwnd)
     ulong maxWindow = std::min(state->snd_wnd, congestionWindow);
+    EV_INFO<<"TcpConnection::sendData(),maxwindow="<<maxWindow<<endl;
 
     // effectiveWindow: number of bytes we're allowed to send now
     long effectiveWin = maxWindow - (state->snd_nxt - state->snd_una);

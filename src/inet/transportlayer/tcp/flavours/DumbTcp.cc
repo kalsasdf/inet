@@ -93,7 +93,7 @@ void DumbTcp::receiveSeqChanged()
     conn->sendAck();
 }
 
-void DumbTcp::receivedDataAck(uint32)
+void DumbTcp::receivedDataAck(uint32 firstSeqAcked,bool ecn)
 {
     // ack may have freed up some room in the window, try sending.
     // small segments also OK (Nagle off)

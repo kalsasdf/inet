@@ -55,6 +55,7 @@ cMessage *EcnMarkQueue::enqueue(cMessage *msg)
 
 cMessage *EcnMarkQueue::dequeue()
 {
+    EV<<"enter dequeue."<<endl;
     if (queue.isEmpty())
         return nullptr;
 
@@ -68,8 +69,9 @@ cMessage *EcnMarkQueue::dequeue()
 
 void EcnMarkQueue::sendOut(cMessage *packet)
 {
+    EV<<"enter sendout"<<endl;
     Packet *pck = check_and_cast<Packet*>(packet);
-    auto ethHeader = pck->removeAtFront<EthernetMacHeader>();
+    /*auto ethHeader = pck->removeAtFront<EthernetMacHeader>();
     const auto& old = pck->removeAtFront<Ipv4Header>();
     const auto& ipv4header = makeShared<Ipv4Header>();
     ipv4header->setExplicitCongestionNotification(3);
@@ -94,7 +96,7 @@ void EcnMarkQueue::sendOut(cMessage *packet)
     const auto& ipold = pck->peekAtFront<Ipv4Header>();
     EV<<"meterPackets(), ecn = "<< ipold->getExplicitCongestionNotification() <<endl;
     pck->insertAtFront(eHeader);
-    packet = check_and_cast<cPacket*>(pck);
+    packet = check_and_cast<cPacket*>(pck);*/
     send(pck, outGate);
 }
 

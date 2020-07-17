@@ -64,6 +64,7 @@ bool PrrScheduler::schedulePacket()
         else{
             if (!inputQueues[i]->isEmpty()) {
                 inputQueues[i]->requestPacket();
+                //PassiveQueueBase::requestPacket();
                 return true;
             }
         }

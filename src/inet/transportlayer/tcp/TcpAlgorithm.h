@@ -138,7 +138,7 @@ class INET_API TcpAlgorithm : public cObject
      * (snd_una - firstSeqAcked). The dupack counter still reflects the old value
      * (needed for Reno and NewReno); it'll be reset to 0 after this call returns.
      */
-    virtual void receivedDataAck(uint32 firstSeqAcked) = 0;
+    virtual void receivedDataAck(uint32 firstSeqAcked,bool ecn) = 0;
 
     /**
      * Called after we received a duplicate ACK (that is: ackNo == snd_una,

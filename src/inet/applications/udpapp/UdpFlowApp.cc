@@ -61,14 +61,14 @@ void UdpFlowApp::initialize(int stage)
         load = par("workLoad");
         linkspeed = par("linkSpeed");
 
-        flowsize = flowsize*1000;
+        //flowsize = flowsize*1000;
         sendInterval = double(packetLength)*8/double(linkspeed);
         sendInterval = sendInterval/1000000000;
         //sendInterval = sendInterval/multiple_of_linkspeed;
 
-        burstTime = sendInterval * (flowsize/packetLength);
+        //burstTime = sendInterval * (flowsize/packetLength);
 
-        sleepTime = (burstTime*multiple_of_linkspeed)/load - burstTime;
+        //sleepTime = (burstTime*multiple_of_linkspeed)/load - burstTime;
 
         if (stopTime >= SIMTIME_ZERO && stopTime < startTime)
             throw cRuntimeError("Invalid startTime/stopTime parameters");
@@ -121,25 +121,6 @@ L3Address UdpFlowApp::chooseDestAddr()
         L3AddressResolver().tryResolve(destAddressStr[k].c_str(), destAddresses[k]);
     }
     return destAddresses[k];
-}
-
-void UdpFlowApp::sendPacket()
-{
-    std::ostringstream str;
-    str << packetName << "-" << flowid;
-    Packet *packet = new Packet(str.str().c_str());
-    const auto& payload = makeShared<ApplicationPacket>();
-    payload->setChunkLength(B(packetLength));
-    payload->setSequenceNumber(flowid);
-    auto creationTimeTag = payload->addTag<CreationTimeTag>();
-    creationTimeTag->setCreationTime(simTime());
-    packet->insertAtBack(payload);
-    packet->setSrcProcId(flowid);
-    packet->setPriority(999);
-    L3Address destAddr = chooseDestAddr();
-    emit(packetSentSignal, packet);
-    socket.sendTo(packet, destAddr, destPort);
-    numSent++;
 }
 
 void UdpFlowApp::processStart()
@@ -204,6 +185,25 @@ void UdpFlowApp::processSend()
         selfMsg->setKind(STOP);
         scheduleAt(stopTime, selfMsg);
     }*/
+}
+
+void UdpFlowApp::sendPacket()
+{
+    std::ostringstream str;
+    str << packetName << "-" << flowid;
+    Packet *packet = new Packet(str.str().c_str());
+    const auto& payload = makeShared<ApplicationPacket>();
+    payload->setChunkLength(B(packetLength));
+    payload->setSequenceNumber(flowid);
+    auto creationTimeTag = payload->addTag<CreationTimeTag>();
+    creationTimeTag->setCreationTime(simTime());
+    packet->insertAtBack(payload);
+    packet->setSrcProcId(flowid);
+    packet->setPriority(999);
+    L3Address destAddr = chooseDestAddr();
+    emit(packetSentSignal, packet);
+    socket.sendTo(packet, destAddr, destPort);
+    numSent++;
 }
 
 void UdpFlowApp::processStop()

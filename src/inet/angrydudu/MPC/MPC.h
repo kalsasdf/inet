@@ -116,6 +116,7 @@ class MPC : public cSimpleModule
     bool useTokens;
     int max_ooo;
     int percdtTokens;
+    int index;
     int64_t globaltimes = 1;
 
     //double segma = 1; // for hybrid flow;
@@ -173,6 +174,9 @@ class MPC : public cSimpleModule
             int nowseq;
             int sumlost;
             double omega;
+            double modeflag;
+            double alpha;
+            double gamma;
 
             // Used for ECN-based rate control.
             int ecn_in_rtt;
@@ -196,6 +200,7 @@ class MPC : public cSimpleModule
             simtime_t cretime;
             // for re-ordering
             long int seq_No;
+            //long int seq[100];
             bool stop_sent;
         };
     struct sender_tokeninfo{
@@ -243,11 +248,14 @@ class MPC : public cSimpleModule
     // Credit feedback control
     double alpha;
     double targetratio;
+    double targetecnratio;
     double wmax;
     double maxrate;
     double currate;
     double wmin;
     double max_lossratio;
+    double modethreshold;
+    double ECN_a=0;
 
 
     // judging which destination the credit from
@@ -374,11 +382,33 @@ class MPC : public cSimpleModule
                 int sumlost = tinfo.sumlost;
                 int sumcredits = tinfo.pck_in_rtt+tinfo.sumlost;
                 double w = tinfo.omega;
+                double MODEFLAG=tinfo.modeflag;
+                double ECN_a=tinfo.alpha;
+                double g=tinfo.gamma;
                 double lossratio = double(sumlost)/double(sumcredits);
+                double ecnratio = double(tinfo.ecn_in_rtt)/double(tinfo.pck_in_rtt);
                 if (lossratio<0||lossratio>1)
                     lossratio = 1;
                 EV << "feedback_control(), sumlost = "<< sumlost << ", sumcredits = "<< sumcredits<<endl;
                 EV << "feedback_control(), loss ratio = "<< lossratio <<endl;
+                //new
+                if(ecnratio<=targetecnratio){
+                    if(MODEFLAG<=modethreshold){
+                        ECN_a=(1-g)*ECN_a+g*ecnratio;
+                        nowrate=nowrate*(1+(targetecnratio+ECN_a)/2);
+                        MODEFLAG++;
+                    }
+                    else{
+                        w = (w+wmax)/2;
+                        nowrate = (1-w)*nowrate + w*maxrate*(1+targetratio);
+                    }
+                }
+                else{
+                    ECN_a=(1-g)*ECN_a+g*ecnratio;
+                    nowrate=nowrate*(1-(targetecnratio+ECN_a)/2);
+                    MODEFLAG=0;
+                }
+                //
                 if(lossratio<=targetratio)
                 {
                     if(tinfo.previousincrease)

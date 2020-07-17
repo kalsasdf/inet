@@ -48,9 +48,9 @@ void TcpNoCongestionControl::processRexmitTimer(TcpEventCode& event)
     conn->retransmitOneSegment(true);
 }
 
-void TcpNoCongestionControl::receivedDataAck(uint32 firstSeqAcked)
+void TcpNoCongestionControl::receivedDataAck(uint32 firstSeqAcked,bool ecn)
 {
-    TcpBaseAlg::receivedDataAck(firstSeqAcked);
+    TcpBaseAlg::receivedDataAck(firstSeqAcked,ecn);
 
     // ack may have freed up some room in the window, try sending
     sendData(false);

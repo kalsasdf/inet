@@ -89,8 +89,9 @@ cMessage *RedEcnQueue::enqueue(cMessage *msg)
         byteLength += packet->getByteLength();
         emit(queueLengthSignal, queue.getLength());
         emit(bufferOccupancySignal, (unsigned long)byteLength);
-        return nullptr;
+        //return nullptr;
     }
+
     return nullptr;
 }
 
@@ -98,6 +99,8 @@ cMessage *RedEcnQueue::dequeue()
 {
     if (queue.isEmpty())
         return nullptr;
+
+    EV<<"enter deququ"<<endl;
 
     cPacket *packet = check_and_cast<cPacket *>(queue.pop());
     byteLength -= packet->getByteLength();
@@ -129,6 +132,8 @@ void RedEcnQueue::sendOut(cMessage *packet)
         send(packet, outGate);
         return;
     }
+
+    EV<<"sendOut(),Queue length ="<<byteLength<<endl;
 
     if (byteLength>kmax && enableEcn)
     {

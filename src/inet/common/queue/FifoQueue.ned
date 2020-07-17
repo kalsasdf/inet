@@ -31,6 +31,11 @@ simple FifoQueue
 {
     parameters:
         string queueName = default("l2queue"); // name of the cQueue object, used in the 'q' tag of the display string
+        //int bufferCapacity @unit(B)= default(5000000B);
+        //double kmin @unit(B)= default(999999B);
+        //double kmax @unit(B)= default(999999B);
+        //double pmax = default(0);
+        //bool enableEcn = default(false);
         @display("i=block/passiveq");
         @signal[packetReceived](type=cPacket);
         @signal[packetEnqueued](type=cPacket);

@@ -61,6 +61,7 @@ import inet.common.queue.IOutputQueue;
 import inet.common.queue.PriorityScheduler;
 import inet.common.queue.Sink;
 import inet.common.queue.WrrScheduler;
+import inet.common.queue.FifoQueue;
 
 import inet.networklayer.diffserv.AFxyQueue;
 import inet.networklayer.diffserv.BehaviorAggregateClassifier;
@@ -165,7 +166,7 @@ module PriorityQueue like IOutputQueue
             //%EcnPmax = 0.1;
             @display("p=400,330");
         }
-        priority: PriorityScheduler {
+        priority: PriorityScheduler {//inet/common/queue
             @display("p=550,330");
         }
 

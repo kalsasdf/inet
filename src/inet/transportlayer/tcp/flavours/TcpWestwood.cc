@@ -123,9 +123,9 @@ void TcpWestwood::processRexmitTimer(TcpEventCode& event)
     conn->retransmitOneSegment(true);
 }
 
-void TcpWestwood::receivedDataAck(uint32 firstSeqAcked)
+void TcpWestwood::receivedDataAck(uint32 firstSeqAcked,bool ecn)
 {
-    TcpBaseAlg::receivedDataAck(firstSeqAcked);
+    TcpBaseAlg::receivedDataAck(firstSeqAcked,ecn);
 
     state->regions.clearTo(state->snd_una);
     const TcpSegmentTransmitInfoList::Item *found = state->regions.get(firstSeqAcked);

@@ -74,8 +74,8 @@ void PassiveQueueBase::handleMessage(cMessage *msg)
             emit(packetDroppedSignal, droppedMsg, &details);
             delete droppedMsg;
         }
-        else
-            notifyListeners();
+        else{
+            notifyListeners();}
     }
 }
 
@@ -89,6 +89,7 @@ void PassiveQueueBase::refreshDisplay() const
 void PassiveQueueBase::requestPacket()
 {
     Enter_Method("requestPacket()");
+    EV<<"enter passivequeuebase."<<endl;
 
     cMessage *msg = dequeue();
     if (msg == nullptr) {

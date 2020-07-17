@@ -288,16 +288,19 @@ void dcqcn::send_data(uint32_t flowid)
     const auto& content = makeShared<Ipv4Header>();
     content->setChunkLength(B(16));
     content->setIdentification(snd_info.pckseq);
+    content->enableImplicitChunkSerialization = true;
+    content->setCrcMode(crcMode);
+    content->setCrc(crcNumber);
     packet->insertAtFront(content);
-    packet->setPriority(snd_info.priority);
+    packet->setSchedulingPriority(snd_info.priority);
     packet->setPathID(intrand(8));
     packet->setPacketECN(1); // enable ecn
     packet->setTimestamp(simTime());
     packet->setFlowId(flowid);
     snd_info.pckseq += 1;
 
-    EV<<"packet length = "<<packet->getByteLength()<<", current rate = "<<snd_info.currentRate<<endl;
-    snd_info.nxtSendTime = double((packet->getByteLength()+70)*8)/snd_info.currentRate + simTime();
+    //EV<<"packet length = "<<packet->getByteLength()<<", current rate = "<<snd_info.currentRate<<endl;
+    snd_info.nxtSendTime = double((packet->getByteLength()+20)*8)/snd_info.currentRate + simTime();
     if (snd_info.SenderState != Normal)
     {
         snd_info.ByteCounter += packet->getByteLength();
@@ -307,7 +310,7 @@ void dcqcn::send_data(uint32_t flowid)
             snd_info.ByteFrSteps++;
             snd_info.ByteCounter = 0;
             sender_flowMap[flowid] =snd_info;
-            EV<<"byte counter expired, byte fr steps = "<<snd_info.ByteFrSteps<<endl;
+            //EV<<"byte counter expired, byte fr steps = "<<snd_info.ByteFrSteps<<endl;
             scheduleAt(snd_info.nxtSendTime,snd_info.senddata);
             increaseTxRate(flowid);
         }
@@ -322,7 +325,7 @@ void dcqcn::send_data(uint32_t flowid)
         sender_flowMap[flowid] =snd_info;
         scheduleAt(snd_info.nxtSendTime,snd_info.senddata);
     }
-    EV << "prepare to send packet, remaining data size = " << snd_info.remainLength <<endl;
+    //EV << "prepare to send packet, remaining data size = " << snd_info.remainLength <<endl;
     sendDown(packet);
     // if no flow exits to be transmitted, stop transmitting.
     if (snd_info.remainLength == 0)
@@ -373,11 +376,12 @@ void dcqcn::receive_cnp(Packet *pck)
         emit(cnpReceivedSignal,1);
         sender_flowinfo sndinfo = sender_flowMap.find(pck->getFlowId())->second;
         // cut rate
+        double oldspeed=sndinfo.currentRate;
         sndinfo.targetRate = sndinfo.currentRate;
         sndinfo.currentRate = sndinfo.currentRate * (1 - sndinfo.alpha/2);
         sndinfo.alpha = (1 - gamma) * sndinfo.alpha + gamma;
-        EV<<"after cutting, the current rate = "<<sndinfo.currentRate<<
-                ", target rate = "<<sndinfo.targetRate<<endl;
+        EV<<"receive_cnp(),"<<"oldspeed="<<oldspeed<<endl;
+        EV<<"after cutting, the current rate = "<<sndinfo.currentRate<<", target rate = "<<sndinfo.targetRate<<endl;
         emit(txRateSignal, sndinfo.currentRate);
 
         // reset timers and counter
@@ -494,25 +498,27 @@ void dcqcn::increaseTxRate(uint32_t flowid)
     {
         sndinfo.SenderState = Additive_Increase;
     }
-    EV<<"entering incease rate, sender state = "<<sndinfo.SenderState<<endl;
+    EV<<"entering incease rate, sender state = "<<sndinfo.SenderState<<",oldspeed="<<oldrate<<endl;
 
     if (sndinfo.SenderState == Fast_Recovery)
     {// Fast Recovery
         sndinfo.currentRate = (sndinfo.currentRate + sndinfo.targetRate) / 2;
+        //sndinfo.currentRate = (sndinfo.currentRate + sndinfo.maxTxRate) / 2;
     }
     else if (sndinfo.SenderState == Additive_Increase)
     {// Additive Increase
-        sndinfo.targetRate += Rai;
-        sndinfo.targetRate = (sndinfo.targetRate > sndinfo.maxTxRate) ? sndinfo.maxTxRate : sndinfo.targetRate;
-
-        sndinfo.currentRate = (sndinfo.currentRate + sndinfo.targetRate) / 2;
+        //sndinfo.targetRate += Rai;
+        //sndinfo.targetRate = (sndinfo.targetRate > sndinfo.maxTxRate) ? sndinfo.maxTxRate : sndinfo.targetRate;
+        //sndinfo.currentRate = (sndinfo.currentRate + sndinfo.targetRate) / 2;
+        sndinfo.currentRate = (sndinfo.currentRate + sndinfo.maxTxRate) / 2;
     }
     else if (sndinfo.SenderState == Hyper_Increase)
     {// Hyper Increase
-        sndinfo.iRhai++;
-        sndinfo.targetRate += sndinfo.iRhai*Rhai;
-        sndinfo.targetRate = (sndinfo.targetRate > sndinfo.maxTxRate) ? sndinfo.maxTxRate : sndinfo.targetRate;
-        sndinfo.currentRate = (sndinfo.currentRate + sndinfo.targetRate) / 2;
+        //sndinfo.iRhai++;
+        //sndinfo.targetRate += sndinfo.iRhai*Rhai;
+        //sndinfo.targetRate = (sndinfo.targetRate > sndinfo.maxTxRate) ? sndinfo.maxTxRate : sndinfo.targetRate;
+        //sndinfo.currentRate = (sndinfo.currentRate + sndinfo.targetRate) / 2;
+        sndinfo.currentRate = (sndinfo.currentRate + sndinfo.maxTxRate) / 2;
     }
     else
     {// Normal state
@@ -545,13 +551,13 @@ bool dcqcn::orderpackets(uint32_t flowid)
 
 void dcqcn::sendDown(Packet *pck)
 {
-    EV << "sendDown " <<pck->getFullName()<<endl;
+    //EV << "sendDown " <<pck->getFullName()<<endl;
     send(pck,lowerOutGate);
 }
 
 void dcqcn::sendUp(Packet *pck)
 {
-    EV<<"dcqcn, oh sendup!"<<endl;
+    //EV<<"dcqcn, oh sendup!"<<endl;
     send(pck,upperOutGate);
 }
 

@@ -120,9 +120,9 @@ void TcpVegas::processRexmitTimer(TcpEventCode& event)
     conn->retransmitOneSegment(true);    //retransmit one segment from snd_una
 }
 
-void TcpVegas::receivedDataAck(uint32 firstSeqAcked)
+void TcpVegas::receivedDataAck(uint32 firstSeqAcked,bool ecn)
 {
-    TcpBaseAlg::receivedDataAck(firstSeqAcked);
+    TcpBaseAlg::receivedDataAck(firstSeqAcked,ecn);
 
     const TcpSegmentTransmitInfoList::Item *found = state->regions.get(firstSeqAcked);
     if (found) {

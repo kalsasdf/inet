@@ -92,7 +92,7 @@ simple TcpFlowApp like IApp
         string dataTransferMode @enum("bytecount","object","bytestream") = default("bytecount");
         double tOpen @unit(s) = default(1s);
         double tSend @unit(s) = default(1s);
-        int sendBytes @unit(B) = default(1MiB);
+        int sendBytes @unit(B) = default(1B);
         string sendScript = default("");
         double tClose @unit(s) = default(2s);
         double byteSeed = default(222.1111);			// random seed of the flow length, for certain traffic

@@ -17,6 +17,7 @@
 //
 
 #include <string.h>
+#include "inet/networklayer/common/EcnTag_m.h"
 #include "inet/transportlayer/tcp/Tcp.h"
 #include "inet/transportlayer/tcp/TcpConnection.h"
 #include "inet/transportlayer/tcp_common/TcpHeader.h"
@@ -504,7 +505,14 @@ TcpEventCode TcpConnection::processSegment1stThru8th(Packet *packet, const Ptr<c
 
                 if (seqGreater(state->snd_una, old_snd_una)) {
                     // notify
-                    tcpAlgorithm->receivedDataAck(old_snd_una);
+                    EcnInd *ecnind = packet->removeTagIfPresent<EcnInd>();
+                    bool ecn = false;
+                    if (ecnind->getExplicitCongestionNotification() == 3)
+                    {
+                        ecn = true;
+                    }
+                    EV<<"processSegment1stThru8th(), ECN = "<<ecn<<endl;
+                    tcpAlgorithm->receivedDataAck(old_snd_una,ecn);
 
                     // in the receivedDataAck we need the old value
                     state->dupacks = 0;
@@ -698,6 +706,9 @@ TcpEventCode TcpConnection::processSegment1stThru8th(Packet *packet, const Ptr<c
             }
         }
 
+        // added by shan huang, for dctcp
+        state->ECN_lable = packet->removeTagIfPresent<EcnInd>()->getExplicitCongestionNotification();
+        EV_DETAIL<<" 00000000 processSegment1stThru8th(), the ECN_lable is set to "<<state->ECN_lable<<endl;
         // tcpAlgorithm decides when and how to do ACKs
         tcpAlgorithm->receiveSeqChanged();
     }
@@ -1221,7 +1232,13 @@ bool TcpConnection::processAckInEstabEtc(Packet *packet, const Ptr<const TcpHead
         // otherwise we would use an old ACKNo
         if (payloadLength == 0 && fsm.getState() != TCP_S_SYN_RCVD) {
             // notify
-            tcpAlgorithm->receivedDataAck(old_snd_una);
+            EcnInd *ecnind = packet->removeTagIfPresent<EcnInd>();
+            bool ecn = false;
+            if (ecnind->getExplicitCongestionNotification() == 3)
+            {
+                ecn = true;
+            }
+            tcpAlgorithm->receivedDataAck(old_snd_una, ecn);
 
             // in the receivedDataAck we need the old value
             state->dupacks = 0;

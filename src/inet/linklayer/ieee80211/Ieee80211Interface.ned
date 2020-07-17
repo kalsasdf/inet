@@ -48,7 +48,7 @@ module Ieee80211Interface like IWirelessInterface
         mac.modeSet = default(opMode);
         mac.*.rateSelection.dataFrameBitrate = default(bitrate);
         *.macModule = default(absPath(".mac"));
-        *.mibModule = default(absPath(".mib"));
+        //*.mibModule = default(absPath(".mib"));
         *.interfaceTableModule = default(absPath(interfaceTableModule));
         *.energySourceModule = default(absPath(energySourceModule));
         @display("i=block/ifcard");
